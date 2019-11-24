@@ -106,25 +106,45 @@ trait Rules extends Configuration with Rotations {
   case class Board(height: Int, rows: List[Row])
 
   /** RowsShape contains the moving part of the board. */
-  case class RowsShape(top: Int, rows: List[Row])
-
-  def listOfPointsToRow(lst: List[P]): Row = {
-    val is = lst.map(_.i).toSet
-    (0 until width).toList.map{
-      case i if is.contains(i) => FilledCell()
-      case _ => EmptyCell
-    }
+  case class RowsShape(top: Int, rows: List[Row]) {
+    def bottom: Int = top - rows.size + 1
   }
 
-  /** This method "renders" the moving state of the tetrimino in the form of a few rows. */
-  def convertTetriminoStateToRows(s: MovingState): RowsShape = {
+  def validate(rowsShape: RowsShape): Option[RowsShape] =
+    if(rowsShape.top >= height || rowsShape.bottom < 0)
+      None
+    else
+      Some(rowsShape)
+
+  def listOfPointsToRow(lst: List[P]): Option[Row] = {
+    val is = lst.map(_.i).toSet
+    if(is.contains(-1) || is.contains(width))
+      None
+    else
+      Some(
+        (0 until width).toList.map {
+          case i if is.contains(i) => FilledCell()
+          case _ => EmptyCell
+        }
+      )
+  }
+
+  /** This method "renders" the moving state of the tetrimino in the form of a few rows.
+   * If the moving state cannot be rendered within the boundaries, then returns None
+   * */
+  def convertTetriminoStateToRows(s: MovingState): Option[RowsShape] = {
     val shape = shapes(s.tetrimino)
     val rotatedShape = shape.rotateBy(s.angle)
     val pointsWithZero = ZeroP :: rotatedShape.points
 
-    val rowCells:List[(Int,Row)] = pointsWithZero.groupBy(_.j).toList.sortBy(-_._1).map{ case (j,ps) => (j, listOfPointsToRow(ps))}
+    val rowCells:List[(Int,Option[Row])] = pointsWithZero.groupBy(_.j).toList.sortBy(-_._1)
+      .map{ case (j,ps) => (j, listOfPointsToRow(ps))}
     val maxJ = rowCells.head._1
-    RowsShape(top = maxJ + s.y, rowCells.map(_._2))
+    if(rowCells.exists(_._2.isEmpty)||maxJ>=height || rowCells.last._1 < 0)
+      None
+    else Some(
+      RowsShape(top = maxJ + s.y, rowCells.map(_._2.get))
+    )
   }
 
   /** Checks two rows if they collide at some position. */
@@ -137,6 +157,7 @@ trait Rules extends Configuration with Rotations {
   }
 
   def mergeLists[A](l1: List[A], l2: List[A])(mergeElements: (A, A) => A): List[A] = {
+    @scala.annotation.tailrec
     def loop(l1: List[A], l2: List[A], res: List[A] = Nil): List[A] =
       (l1, l2) match {
         case (Nil, _) => res.reverse // we ignore the rest of the second list if it's longer
@@ -172,7 +193,7 @@ trait Rules extends Configuration with Rotations {
     Board(height, mergeLists(boardRows, movingRows)(mergeRows(_,_)))
   }
 
-  def randomTetrimino(random: Int) =
+  def randomTetrimino(random: Int): Tetrimino =
     Tetrimino.values(random % Tetrimino.values.size)
 
   def generateMovingState(t: Tetrimino, random: Int): MovingState = {
