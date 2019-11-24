@@ -13,6 +13,7 @@ trait Rotations {
    */
   case class P(i: Int, j: Int)
 
+  val ZeroP = P(0, 0)
   implicit class IntOps(i: Int){
     def ~(j: Int): P = P(i,j)
   }
@@ -24,6 +25,7 @@ trait Rotations {
   val rotateLeft  = Rotation( 0,-1, 1, 0)
   val rotateId    = Rotation( 1, 0, 0, 1)
   val rotate180   = Rotation(-1, 0, 0,-1)
+  val rotations = List(rotateId, rotateRight, rotate180, rotateLeft)
 
   implicit class RotationOps(m: Rotation) {
     def apply(r: P): P = P(
