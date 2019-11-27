@@ -1,6 +1,6 @@
 package ru.primetalk.tetris
 
-trait GameStates extends Rules {
+trait GameMechanics extends Rules {
 
   sealed trait State
   case class RunningGameState(board: Board, movingState: MovingState, rowsShape: RowsShape, nextTetrimino: Tetrimino) extends State
@@ -13,16 +13,16 @@ trait GameStates extends Rules {
   def move(movingState: MovingState, rowsShape: RowsShape, event: Event): (MovingState, Option[RowsShape]) = event match {
     case Timer =>
       (
-        movingState.copy(y = movingState.y - 1),
+        movingState.copy(position = movingState.position + P(0, -1)),
         validate(rowsShape.copy(top = rowsShape.top - 1))
       )
     case UserInteraction(Control.Drop) => // we just move by 1 down
       (
-        movingState.copy(y = movingState.y - 1),
+        movingState.copy(position = movingState.position + P(0, -1)),
         validate(rowsShape.copy(top = rowsShape.top - 1))
       )
     case UserInteraction(Control.ShiftXBy(deltaX)) =>
-      val nextMovingState = movingState.copy(x = movingState.x + deltaX)
+      val nextMovingState = movingState.copy(position = movingState.position + P(deltaX, 0))
       (
         nextMovingState,
         convertTetriminoStateToRows(nextMovingState)
@@ -40,10 +40,15 @@ trait GameStates extends Rules {
     case RunningGameState(board, movingState, rowsShape, nextTetrimino) =>
       val (nextMovingState, nextRowsShapeOpt) = move(movingState, rowsShape, event)
       def takeNextTetrimino: State = {
-        val nextBoard = bake(board, rowsShape)
-        val nextMovingState = generateMovingState(nextTetrimino, random)
+        val bakedBoard = bake(board, rowsShape)
+        val (nextBoard, count) = removeFilledRows(bakedBoard)
+        val preMovingState = generateMovingState(nextTetrimino, random)
+        val nextMovingState = preMovingState.copy(tPerYRow = preMovingState.tPerYRow - count)
         val nextNextTetrimino = randomTetrimino(random)
         val nextRowsShape2 = convertTetriminoStateToRows(nextMovingState)
+        if(nextRowsShape2.isEmpty) {
+          println("Couldn't convert just generated Tetrimino")
+        }
         if(nextRowsShape2.isEmpty || isThereACollision(nextBoard, nextRowsShape2.get))
           FinishedGame(nextBoard)
         else
@@ -63,5 +68,20 @@ trait GameStates extends Rules {
             takeNextTetrimino // if we cannot move on timer, we bake the current state and move to the next tetrimino
         }
       }
+  }
+
+  def startGame(random: Int): RunningGameState = {
+    val t = randomTetrimino(random)
+    println(t)
+    val m = generateMovingState(t, random)
+    convertTetriminoStateToRows(m) match {
+      case Some(rowsShape) =>
+        val initialRows = List(List.fill(width)(FilledCell()))
+        RunningGameState (Board(initialRows.size, initialRows), m, rowsShape,
+          randomTetrimino (random / Tetrimino.values.size) )
+      case None =>
+        println("Failed to generate a tetrimino")
+        startGame(random + 1)
+    }
   }
 }

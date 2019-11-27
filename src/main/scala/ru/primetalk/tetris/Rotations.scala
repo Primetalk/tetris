@@ -18,6 +18,10 @@ trait Rotations {
     def ~(j: Int): P = P(i,j)
   }
 
+  implicit class POps(p: P) {
+    def +(o: P): P = P(p.i + o.i, p.j + o.j)
+    def -(o: P): P = P(p.i - o.i, p.j - o.j)
+  }
   case class Rotation(a: Int = 0, b: Int, c: Int, d: Int = 0) // all elements are in the range of [-1,1]
 
   // Here is the group of rotations:

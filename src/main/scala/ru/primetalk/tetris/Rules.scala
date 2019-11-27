@@ -86,12 +86,11 @@ trait Rules extends Configuration with Rotations {
   val defaultTPerYRow: TimeMs = 1000
   /**
    * Part of state about the moving tetrimino.
-   * @param x vertical position
-   * @param y vertical position
+   * @param position position
    * @param tPerYRow - time that it takes to move to the next row. It's an inverse of the velocity
    *                 we can use this time as an argument to timer.
    */
-  case class MovingState(tetrimino: Tetrimino, x: Int, y: Int, angle: Angle, tPerYRow: TimeMs)
+  case class MovingState(tetrimino: Tetrimino, position: P, angle: Angle, tPerYRow: TimeMs)
 
   sealed trait CellInfo
   case object EmptyCell extends CellInfo
@@ -137,21 +136,26 @@ trait Rules extends Configuration with Rotations {
     val rotatedShape = shape.rotateBy(s.angle)
     val pointsWithZero = ZeroP :: rotatedShape.points
 
-    val rowCells:List[(Int,Option[Row])] = pointsWithZero.groupBy(_.j).toList.sortBy(-_._1)
+    val pointsShifted = pointsWithZero.map(_ + s.position)
+    val rowCells:List[(Int,Option[Row])] = pointsShifted.groupBy(_.j).toList.sortBy(-_._1)
       .map{ case (j,ps) => (j, listOfPointsToRow(ps))}
     val maxJ = rowCells.head._1
-    if(rowCells.exists(_._2.isEmpty)||maxJ>=height || rowCells.last._1 < 0)
-      None
-    else Some(
-      RowsShape(top = maxJ + s.y, rowCells.map(_._2.get))
-    )
+//    if(rowCells.exists(_._2.isEmpty) || // || maxJ>=height - removing this because when we just start, part of tetrimino might be above.
+//      rowCells.last._1 < 0)
+//      None
+//    else
+      Some(
+        RowsShape(top = maxJ, rowCells.map(_._2.get))
+      )
   }
 
   /** Checks two rows if they collide at some position. */
   def isRowsCollision(r1: Row, r2: Row): Boolean = {
-    r1.nonEmpty && ((r1, r2 ) match {
+    ((r1, r2 ) match {
       case (EmptyCell::t1, _::t2) => isRowsCollision(t1,t2)
       case (_::t1, EmptyCell::t2) => isRowsCollision(t1,t2)
+      case (Nil, _) => false
+      case (_, Nil) => false
       case _ => true
     })
   }
@@ -179,26 +183,28 @@ trait Rules extends Configuration with Rotations {
 
   // isThereACollision checks if there is a collision between the board and the moving state.
   def isThereACollision(board: Board, moving: RowsShape): Boolean = {
-    prepend(moving.top - board.height, emptyRow)(board.rows).zip(
-      prepend(- moving.top + board.height, emptyRow)(moving.rows)
-    ).exists((isRowsCollision _).tupled)
+    val height = math.max(board.height, moving.top)
+    val boardRows  = List.fill(height - board.height)(emptyRow) ::: board.rows
+    val movingRows = List.fill(height - moving.top)(emptyRow) ::: moving.rows
+
+    boardRows.zip(movingRows).exists((isRowsCollision _).tupled)
   }
 
   // when we cannot move further, we bake the tetramino at the position
   def bake(board: Board, moving: RowsShape): Board = {
 //    val renderedShape = convertTetriminoStateToRows(movingState)
     val height = math.max(board.height, moving.top)
-    val boardRows = List.fill(height - board.height)(emptyRow) ::: board.rows
-    val movingRows = List.fill(height-moving.top)(emptyRow) ::: moving.rows
+    val boardRows  = List.fill(height - board.height)(emptyRow) ::: board.rows
+    val movingRows = List.fill(height - moving.top)(emptyRow) ::: moving.rows
     Board(height, mergeLists(boardRows, movingRows)(mergeRows(_,_)))
   }
 
   def randomTetrimino(random: Int): Tetrimino =
-    Tetrimino.values(random % Tetrimino.values.size)
+    Tetrimino.values(math.abs(random) % Tetrimino.values.size)
 
   def generateMovingState(t: Tetrimino, random: Int): MovingState = {
-    val angle = rotations(random % rotations.size)
-    MovingState(t, width / 2, height, angle, defaultTPerYRow)
+    val angle = rotations(math.abs(random) % rotations.size)
+    MovingState(t, P(width / 2, height - 1), angle, defaultTPerYRow)
   }
 //  def generateMovingState(random: Int): MovingState = {
 //    val t = Tetrimino.values(random % Tetrimino.values.size)
@@ -206,4 +212,12 @@ trait Rules extends Configuration with Rotations {
 //    MovingState(t, width / 2, height, angle, defaultTPerYRow)
 //  }
 
+  def isFilled(r: Row): Boolean =
+    !r.contains(EmptyCell)
+
+  def removeFilledRows(board: Board): (Board, Int) = {
+    val (removed, rows) = board.rows.partition(isFilled)
+    val count = removed.size
+    (Board(board.height - count, rows), count)
+  }
 }
