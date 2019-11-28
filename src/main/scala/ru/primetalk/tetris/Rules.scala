@@ -51,30 +51,22 @@ trait Rules extends Configuration with Rotations {
     val values = List(I, J, L, O, S, T, Z)
   }
 
-  // We save only 3 points. The position 0,0 is always present.
+  // We save only 3 points of 4. The position 0,0 is always present.
   case class TetriminoShape(points: List[P])
   val shapes: Map[Tetrimino, TetriminoShape] = Map(
-    Tetrimino.I -> TetriminoShape(List(0~ 2, 0~1, 0~ -1)),
-    Tetrimino.J -> TetriminoShape(List(0~ 2, 0~1, -1~0)),
-    Tetrimino.L -> TetriminoShape(List(0~ 2, 0~1, 1~0)),
-    Tetrimino.O -> TetriminoShape(List(0~ 1, 1~1, 1~0)),
-    Tetrimino.S -> TetriminoShape(List(-1~ 0, 0~ -1, 1~ -1)),
-    Tetrimino.T -> TetriminoShape(List(-1~ 0, 1~ 0, 0~ -1)),
-    Tetrimino.Z -> TetriminoShape(List(1~ 0, 0~ -1, -1~ -1))
+    Tetrimino.I -> TetriminoShape(List( 0~ 2, 0~  1,  0~ -1)),
+    Tetrimino.J -> TetriminoShape(List( 0~ 2, 0~  1, -1~  0)),
+    Tetrimino.L -> TetriminoShape(List( 0~ 2, 0~  1,  1~  0)),
+    Tetrimino.O -> TetriminoShape(List( 0~ 1, 1~  1,  1~  0)),
+    Tetrimino.S -> TetriminoShape(List(-1~ 0, 0~ -1,  1~ -1)),
+    Tetrimino.T -> TetriminoShape(List(-1~ 0, 1~  0,  0~ -1)),
+    Tetrimino.Z -> TetriminoShape(List( 1~ 0, 0~ -1, -1~ -1))
   )
 
   implicit class TetriminoShapeOps(shape: TetriminoShape) {
     def rotateBy(m: Rotation): TetriminoShape =
       TetriminoShape(shape.points.map(m(_)))
   }
-
-  sealed trait Control
-  object Control {
-    case class ShiftXBy(deltaX: Int) extends Control
-    case class RotateBy(m: Rotation) extends Control
-    case object Drop extends Control
-  }
-
 
   // case class Color() - home exercise
 
@@ -83,6 +75,7 @@ trait Rules extends Configuration with Rotations {
 
   // There are only 4 angles and they all are connected by rotations.
   type Angle = Rotation
+
   val defaultTPerYRow: TimeMs = 1000
   /**
    * Part of state about the moving tetrimino.
@@ -94,30 +87,39 @@ trait Rules extends Configuration with Rotations {
 
   sealed trait CellInfo
   case object EmptyCell extends CellInfo
+  // Home exercise: add a logical `color` to match colors of tetriminos
   case class FilledCell(/* color: Color */) extends CellInfo
 
+  // For curious: there is a way to represent list of length N in Scala. Like `List[10, CellInfo]`
   type Row = List[CellInfo]
+  type Rows = List[Row]
   val emptyRow: Row = List.fill(width)(EmptyCell)
+
+  /** RowsShape contains a few rows with some filled cells.
+   * This data structure is reused for the board itself and for the moving set of rows. */
+  case class RowsShape(top: Int, rows: Rows) {
+    def bottom: Int = top - rows.size + 1
+    def height: Int = top
+  }
+
   /**
    * Board represents the current state of the board.
    * We store only filled rows starting from the top one.
    */
-  case class Board(height: Int, rows: List[Row])
+  type Board = RowsShape
 
-  /** RowsShape contains the moving part of the board. */
-  case class RowsShape(top: Int, rows: List[Row]) {
-    def bottom: Int = top - rows.size + 1
-  }
+  def Board(h: Int, rows: Rows): Board = RowsShape(h, rows)
 
   def validate(rowsShape: RowsShape): Option[RowsShape] =
-    if(rowsShape.top >= height || rowsShape.bottom < 0)
+    if(rowsShape.bottom <= 0)
       None
     else
       Some(rowsShape)
 
+  // all points in this list should be on the same height
   def listOfPointsToRow(lst: List[P]): Option[Row] = {
     val is = lst.map(_.i).toSet
-    if(is.contains(-1) || is.contains(width))
+    if(is.contains(-1) || is.contains(width)) // prevent moving outside left and right borders
       None
     else
       Some(
@@ -139,26 +141,26 @@ trait Rules extends Configuration with Rotations {
     val pointsShifted = pointsWithZero.map(_ + s.position)
     val rowCells:List[(Int,Option[Row])] = pointsShifted.groupBy(_.j).toList.sortBy(-_._1)
       .map{ case (j,ps) => (j, listOfPointsToRow(ps))}
-    val maxJ = rowCells.head._1
-//    if(rowCells.exists(_._2.isEmpty) || // || maxJ>=height - removing this because when we just start, part of tetrimino might be above.
-//      rowCells.last._1 < 0)
-//      None
-//    else
-      Some(
-        RowsShape(top = maxJ, rowCells.map(_._2.get))
-      )
+    if(rowCells.last._1 < 0)
+      None
+    else
+      Some(RowsShape(top = rowCells.head._1, rowCells.map(_._2.get)))
   }
 
-  /** Checks two rows if they collide at some position. */
-  def isRowsCollision(r1: Row, r2: Row): Boolean = {
-    ((r1, r2 ) match {
+  /** Checks two rows if they collide at some position.
+   * it recursively checks the heads of both rows. If one of those
+   * is empty - proceed with the rest of the list.
+   * if one of the lists finishes, then there is no collision.
+   * otherwise - it's collision
+   * */
+  def isRowsCollision(r1: Row, r2: Row): Boolean =
+    (r1, r2 ) match {
       case (EmptyCell::t1, _::t2) => isRowsCollision(t1,t2)
       case (_::t1, EmptyCell::t2) => isRowsCollision(t1,t2)
       case (Nil, _) => false
       case (_, Nil) => false
       case _ => true
-    })
-  }
+    }
 
   def mergeLists[A](l1: List[A], l2: List[A])(mergeElements: (A, A) => A): List[A] = {
     @scala.annotation.tailrec
@@ -192,8 +194,8 @@ trait Rules extends Configuration with Rotations {
 
   // when we cannot move further, we bake the tetramino at the position
   def bake(board: Board, moving: RowsShape): Board = {
-//    val renderedShape = convertTetriminoStateToRows(movingState)
     val height = math.max(board.height, moving.top)
+    // make rows to be of the same height
     val boardRows  = List.fill(height - board.height)(emptyRow) ::: board.rows
     val movingRows = List.fill(height - moving.top)(emptyRow) ::: moving.rows
     Board(height, mergeLists(boardRows, movingRows)(mergeRows(_,_)))
@@ -206,11 +208,6 @@ trait Rules extends Configuration with Rotations {
     val angle = rotations(math.abs(random) % rotations.size)
     MovingState(t, P(width / 2, height - 1), angle, defaultTPerYRow)
   }
-//  def generateMovingState(random: Int): MovingState = {
-//    val t = Tetrimino.values(random % Tetrimino.values.size)
-//    val angle = rotations(random % rotations.size)
-//    MovingState(t, width / 2, height, angle, defaultTPerYRow)
-//  }
 
   def isFilled(r: Row): Boolean =
     !r.contains(EmptyCell)

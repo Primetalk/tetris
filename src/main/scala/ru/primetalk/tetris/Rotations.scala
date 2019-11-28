@@ -7,13 +7,14 @@ package ru.primetalk.tetris
 trait Rotations {
 
   /**
-   * P is a position or vector.
+   * P is a position or a vector.
    * @param i - x
    * @param j - y
    */
   case class P(i: Int, j: Int)
 
   val ZeroP = P(0, 0)
+  // Small DSL for creating vectors
   implicit class IntOps(i: Int){
     def ~(j: Int): P = P(i,j)
   }
@@ -22,13 +23,19 @@ trait Rotations {
     def +(o: P): P = P(p.i + o.i, p.j + o.j)
     def -(o: P): P = P(p.i - o.i, p.j - o.j)
   }
+  // It's a matrix:
+  //  /     \
+  //  | a b |
+  //  | c d |
+  //  \     /
   case class Rotation(a: Int = 0, b: Int, c: Int, d: Int = 0) // all elements are in the range of [-1,1]
 
-  // Here is the group of rotations:
+  // Here is the group of rotations by 90 degrees:
   val rotateRight = Rotation( 0, 1,-1, 0)
   val rotateLeft  = Rotation( 0,-1, 1, 0)
   val rotateId    = Rotation( 1, 0, 0, 1)
   val rotate180   = Rotation(-1, 0, 0,-1)
+
   val rotations = List(rotateId, rotateRight, rotate180, rotateLeft)
 
   implicit class RotationOps(m: Rotation) {

@@ -5,10 +5,19 @@ trait GameMechanics extends Rules {
   sealed trait State
   case class RunningGameState(board: Board, movingState: MovingState, rowsShape: RowsShape, nextTetrimino: Tetrimino) extends State
   case class FinishedGame(board: Board) extends State
+  case class PausedGame(s: State) extends State
+
+  sealed trait Control
+  object Control {
+    case class ShiftXBy(deltaX: Int) extends Control
+    case class RotateBy(m: Rotation) extends Control
+    case object Drop extends Control
+  }
 
   sealed trait Event
   case object Timer extends Event
   case class UserInteraction(control: Control) extends Event
+  case object Pause extends Event
 
   def move(movingState: MovingState, rowsShape: RowsShape, event: Event): (MovingState, Option[RowsShape]) = event match {
     case Timer =>
@@ -16,6 +25,7 @@ trait GameMechanics extends Rules {
         movingState.copy(position = movingState.position + P(0, -1)),
         validate(rowsShape.copy(top = rowsShape.top - 1))
       )
+    case Pause => (movingState, Some(rowsShape))
     case UserInteraction(Control.Drop) => // we just move by 1 down
       (
         movingState.copy(position = movingState.position + P(0, -1)),
@@ -35,9 +45,12 @@ trait GameMechanics extends Rules {
       )
   }
 
-  def handleEvent(s: State, event: Event, random: Int): State = s match {
-    case f: FinishedGame => f
-    case RunningGameState(board, movingState, rowsShape, nextTetrimino) =>
+  def handleEvent(s: State, event: Event, random: Int): State = (s, event) match {
+    case (f: FinishedGame, _) => f
+    case (PausedGame(g), Pause) => g
+    case (PausedGame(_), _) => s // ignoring other events when paused
+    case (_, Pause) => PausedGame(s)
+    case (RunningGameState(board, movingState, rowsShape, nextTetrimino), _) =>
       val (nextMovingState, nextRowsShapeOpt) = move(movingState, rowsShape, event)
       def takeNextTetrimino: State = {
         val bakedBoard = bake(board, rowsShape)
@@ -66,13 +79,14 @@ trait GameMechanics extends Rules {
             RunningGameState(board, movingState, rowsShape, nextTetrimino)
           case Timer =>
             takeNextTetrimino // if we cannot move on timer, we bake the current state and move to the next tetrimino
+          case Pause =>
+            RunningGameState(board, movingState, rowsShape, nextTetrimino)
         }
       }
   }
 
   def startGame(random: Int): RunningGameState = {
     val t = randomTetrimino(random)
-    println(t)
     val m = generateMovingState(t, random)
     convertTetriminoStateToRows(m) match {
       case Some(rowsShape) =>

@@ -33,6 +33,7 @@ class Controller(val ctx: dom.CanvasRenderingContext2D) {
       case KeyCode.Left => Some(Game.UserInteraction(Game.Control.ShiftXBy(-1)))
       case KeyCode.Right => Some(Game.UserInteraction(Game.Control.ShiftXBy(1)))
       case KeyCode.Down => Some(Game.UserInteraction(Game.Control.Drop))
+      case KeyCode.P => Some(Game.Pause)
       case _ => None
     }
   }
@@ -45,6 +46,11 @@ class Controller(val ctx: dom.CanvasRenderingContext2D) {
           planNextTimer()
         }
       case Game.FinishedGame(_) => // nothing
+      case Game.PausedGame(_) =>
+        setTimeout(Game.defaultTPerYRow) { // we'll tick even in the paused state
+          handleEvent(Game.Timer)
+          planNextTimer()
+        }
     }
   }
 

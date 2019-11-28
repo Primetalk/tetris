@@ -9,6 +9,7 @@ class View(val ctx: dom.CanvasRenderingContext2D) {
   val cellSize = math.min(ctx.canvas.width / Game.width, ctx.canvas.height / Game.height)
 
   val backgroundColor = dom.ext.Color.White
+
   def jToY(j: Int): Int = ctx.canvas.height - cellSize * (j + 1)
 
   def rowView(j: Int, row: Row, color: dom.ext.Color): Unit = {
@@ -20,9 +21,7 @@ class View(val ctx: dom.CanvasRenderingContext2D) {
   }
 
   def boardView(board: Board): Unit = {
-    board.rows.zip((board.height - 1).to(0, -1)).foreach{ case (r, j) =>
-        rowView(j, r, dom.ext.Color.Cyan)
-    }
+    rowsShapeView(board, dom.ext.Color.Cyan)
   }
 
   def rowsShapeView(rowsShape: RowsShape, color: dom.ext.Color): Unit = {
@@ -32,15 +31,20 @@ class View(val ctx: dom.CanvasRenderingContext2D) {
   }
 
   def redrawGame(oldGame: State, newState: State): Unit = {
+    ctx.beginPath()
     oldGame match {
-      case RunningGameState(_, _, rowsShape, _) => rowsShapeView(rowsShape, backgroundColor)
-      case FinishedGame(_) =>
+      case RunningGameState(board, _, rowsShape, _) =>
+        rowsShapeView(board, backgroundColor)
+        rowsShapeView(rowsShape, backgroundColor)
+      case _ =>
+
     }
     newState match {
       case RunningGameState(board, _, rowsShape, _) =>
         boardView(board)
-        rowsShapeView(rowsShape, dom.ext.Color.Yellow)
-      case FinishedGame(_) =>
+        rowsShapeView(rowsShape, dom.ext.Color.Magenta)
+      case _ =>
     }
+    ctx.stroke()
   }
 }
