@@ -23,12 +23,17 @@ trait Rotations {
     def +(o: P): P = P(p.i + o.i, p.j + o.j)
     def -(o: P): P = P(p.i - o.i, p.j - o.j)
   }
-  // It's a matrix:
-  //  /     \
-  //  | a b |
-  //  | c d |
-  //  \     /
-  case class Rotation(a: Int = 0, b: Int, c: Int, d: Int = 0) // all elements are in the range of [-1,1]
+  /** It's a matrix:
+   *  /     \
+   *  | a b |
+   *  | c d |
+   *  \     /
+   * In our case all elements are in the range of [-1,1]
+   */
+  case class Rotation(
+    a: Int = 0, b: Int,
+    c: Int, d: Int = 0
+  )
 
   // Here is the group of rotations by 90 degrees:
   val rotateRight = Rotation( 0, 1,-1, 0)

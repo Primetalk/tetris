@@ -6,8 +6,10 @@ import org.scalajs.dom.ext.KeyCode
 import scala.util.Random
 import scala.scalajs.js.timers._
 
+// Mutable part of the program
 class Controller(val ctx: dom.CanvasRenderingContext2D) {
   val view = new View(ctx)
+  // The following are the only two variables in the program
   val rnd = new Random()
   private var currentGameState: Game.State = Game.startGame(rnd.nextInt())
 

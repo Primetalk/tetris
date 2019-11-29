@@ -4,7 +4,13 @@ import Game._
 import org.scalajs.dom
 import org.scalajs.dom.ext.Color
 
-/** Renders just the board on canvas. */
+/** Renders board on canvas.
+ * It is itself immutable, but performs mutations on the provided context.
+ *  TODO: show next tetrimino
+ *  TODO*: next tetrimino should rotate at the same speed.
+ *  TODO: draw cells with a nice border
+ *  TODO: draw original tetris colors
+ */
 class View(val ctx: dom.CanvasRenderingContext2D) {
   val cellSize = math.min(ctx.canvas.width / Game.width, ctx.canvas.height / Game.height)
 
@@ -16,12 +22,8 @@ class View(val ctx: dom.CanvasRenderingContext2D) {
     row.zipWithIndex.filter(_._1.isInstanceOf[FilledCell]).map(_._2).foreach{
       i =>
         ctx.fillStyle = color.toString()
-        ctx.fillRect(i * cellSize, jToY(j), cellSize - 1, cellSize - 1)
+        ctx.fillRect(i * cellSize, jToY(j), cellSize - 1, cellSize - 1) // -1 - is the thin line between cells
     }
-  }
-
-  def boardView(board: Board): Unit = {
-    rowsShapeView(board, dom.ext.Color.Cyan)
   }
 
   def rowsShapeView(rowsShape: RowsShape, color: dom.ext.Color): Unit = {
@@ -36,13 +38,18 @@ class View(val ctx: dom.CanvasRenderingContext2D) {
       case RunningGameState(board, _, rowsShape, _) =>
         rowsShapeView(board, backgroundColor)
         rowsShapeView(rowsShape, backgroundColor)
+      case PausedGame(RunningGameState(board, _, rowsShape, _)) =>
+        rowsShapeView(board, backgroundColor)
+        rowsShapeView(rowsShape, backgroundColor)
       case _ =>
-
     }
     newState match {
       case RunningGameState(board, _, rowsShape, _) =>
-        boardView(board)
+        rowsShapeView(board, dom.ext.Color.Cyan)
         rowsShapeView(rowsShape, dom.ext.Color.Magenta)
+      case PausedGame(RunningGameState(board, _, rowsShape, _)) =>
+        rowsShapeView(board, dom.ext.Color.Blue)
+        rowsShapeView(rowsShape, dom.ext.Color.Green)
       case _ =>
     }
     ctx.stroke()

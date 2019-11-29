@@ -1,5 +1,10 @@
 package ru.primetalk.tetris
 
+/**
+ *
+ * TODO: Add game score, improve speedup
+ * TODO: Add a few randomly filled rows.
+ */
 trait GameMechanics extends Rules {
 
   sealed trait State
@@ -45,42 +50,46 @@ trait GameMechanics extends Rules {
       )
   }
 
+  // attempts to start moving the next tetrimino
+  def takeNextTetrimino(gameState: RunningGameState, random: Int): State = gameState match {
+    case RunningGameState(board, _, rowsShape, nextTetrimino) =>
+      val bakedBoard = bake(board, rowsShape)
+      val (nextBoard, count) = removeFilledRows(bakedBoard)
+      val preMovingState = generateMovingState(nextTetrimino, random)
+      val nextMovingState = preMovingState.copy(tPerYRow = preMovingState.tPerYRow - count)
+      val nextNextTetrimino = randomTetrimino(random)
+      val nextRowsShape2 = convertTetriminoStateToRows(nextMovingState)
+      if(nextRowsShape2.isEmpty) {
+        println("Couldn't co  nvert just generated Tetrimino")
+      }
+      if(nextRowsShape2.isEmpty || isThereACollision(nextBoard, nextRowsShape2.get))
+        FinishedGame(nextBoard)
+      else
+        RunningGameState(nextBoard, nextMovingState, nextRowsShape2.get, nextNextTetrimino)
+  }
+
   def handleEvent(s: State, event: Event, random: Int): State = (s, event) match {
     case (f: FinishedGame, _) => f
     case (PausedGame(g), Pause) => g
     case (PausedGame(_), _) => s // ignoring other events when paused
     case (_, Pause) => PausedGame(s)
-    case (RunningGameState(board, movingState, rowsShape, nextTetrimino), _) =>
+    case (gameState@RunningGameState(board, movingState, rowsShape, nextTetrimino), _) =>
       val (nextMovingState, nextRowsShapeOpt) = move(movingState, rowsShape, event)
-      def takeNextTetrimino: State = {
-        val bakedBoard = bake(board, rowsShape)
-        val (nextBoard, count) = removeFilledRows(bakedBoard)
-        val preMovingState = generateMovingState(nextTetrimino, random)
-        val nextMovingState = preMovingState.copy(tPerYRow = preMovingState.tPerYRow - count)
-        val nextNextTetrimino = randomTetrimino(random)
-        val nextRowsShape2 = convertTetriminoStateToRows(nextMovingState)
-        if(nextRowsShape2.isEmpty) {
-          println("Couldn't convert just generated Tetrimino")
-        }
-        if(nextRowsShape2.isEmpty || isThereACollision(nextBoard, nextRowsShape2.get))
-          FinishedGame(nextBoard)
-        else
-          RunningGameState(nextBoard, nextMovingState, nextRowsShape2.get, nextNextTetrimino)
-      }
+
       nextRowsShapeOpt match {
         case Some(nextRowsShape) =>
-          if(isThereACollision(board, nextRowsShape)) { // cannot move
-            takeNextTetrimino
+          if(isThereACollision(board, nextRowsShape)) { // cannot move inside existing filled cells
+            takeNextTetrimino(gameState, random)
           } else {
             RunningGameState(board, nextMovingState, nextRowsShape, nextTetrimino)
           }
         case None => event match {
           case UserInteraction(_) =>
-            RunningGameState(board, movingState, rowsShape, nextTetrimino)
+            gameState
           case Timer =>
-            takeNextTetrimino // if we cannot move on timer, we bake the current state and move to the next tetrimino
+            takeNextTetrimino(gameState, random) // if we cannot move on timer, we bake the current state and move to the next tetrimino
           case Pause =>
-            RunningGameState(board, movingState, rowsShape, nextTetrimino)
+            gameState
         }
       }
   }
@@ -90,7 +99,7 @@ trait GameMechanics extends Rules {
     val m = generateMovingState(t, random)
     convertTetriminoStateToRows(m) match {
       case Some(rowsShape) =>
-        val initialRows = List(List.fill(width)(FilledCell()))
+        val initialRows = List()// List.fill(width)(FilledCell()))
         RunningGameState (Board(initialRows.size, initialRows), m, rowsShape,
           randomTetrimino (random / Tetrimino.values.size) )
       case None =>
@@ -99,3 +108,5 @@ trait GameMechanics extends Rules {
     }
   }
 }
+
+object Game extends GameMechanics
