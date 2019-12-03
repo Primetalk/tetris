@@ -5,12 +5,15 @@ package ru.primetalk.tetris
  * TODO: Add game score, improve speedup
  * TODO: Add a few randomly filled rows.
  */
-trait GameMechanics extends Rules {
+trait GameMechanics extends RowOfCells {
 
-  sealed trait State
-  case class RunningGameState(board: Board, movingState: MovingState, rowsShape: RowsShape, nextTetrimino: Tetrimino) extends State
-  case class FinishedGame(board: Board) extends State
-  case class PausedGame(s: State) extends State
+  sealed trait GameState
+  object GameState {
+    case class Running(board: Board, movingState: MovingState, rowsShape: RowsShape, nextTetrimino: Tetrimino) extends GameState
+    case class Finished(board: Board) extends GameState
+    case class Paused(s: GameState) extends GameState
+  }
+  import GameState._
 
   sealed trait Control
   object Control {
@@ -20,29 +23,26 @@ trait GameMechanics extends Rules {
   }
 
   sealed trait Event
-  case object Timer extends Event
-  case class UserInteraction(control: Control) extends Event
-  case object Pause extends Event
+  object Event {
+    case object Timer extends Event
+    case class MovingShapeControl(control: Control) extends Event
+    case object Pause extends Event
+  }
+  import Event._
 
-  def move(movingState: MovingState, rowsShape: RowsShape, event: Event): (MovingState, Option[RowsShape]) = event match {
-    case Timer =>
+  def move(movingState: MovingState, rowsShape: RowsShape, control: Control): (MovingState, Option[RowsShape]) = control match {
+    case Control.Drop => // we just move by 1 down
       (
         movingState.copy(position = movingState.position + P(0, -1)),
-        validate(rowsShape.copy(top = rowsShape.top - 1))
+        rowsShape.copy(top = rowsShape.top - 1).makeSureAboveLowerBorder
       )
-    case Pause => (movingState, Some(rowsShape))
-    case UserInteraction(Control.Drop) => // we just move by 1 down
-      (
-        movingState.copy(position = movingState.position + P(0, -1)),
-        validate(rowsShape.copy(top = rowsShape.top - 1))
-      )
-    case UserInteraction(Control.ShiftXBy(deltaX)) =>
+    case Control.ShiftXBy(deltaX) =>
       val nextMovingState = movingState.copy(position = movingState.position + P(deltaX, 0))
       (
         nextMovingState,
         convertTetriminoStateToRows(nextMovingState)
       )
-    case UserInteraction(Control.RotateBy(m)) =>
+    case Control.RotateBy(m) =>
       val nextMovingState = movingState.copy(angle = m(movingState.angle))
       (
         nextMovingState,
@@ -51,56 +51,63 @@ trait GameMechanics extends Rules {
   }
 
   // attempts to start moving the next tetrimino
-  def takeNextTetrimino(gameState: RunningGameState, random: Int): State = gameState match {
-    case RunningGameState(board, _, rowsShape, nextTetrimino) =>
+  def takeNextTetrimino(gameState: GameState.Running, random: Int): GameState = gameState match {
+    case Running(board, _, rowsShape, nextTetrimino) =>
       val bakedBoard = bake(board, rowsShape)
       val (nextBoard, count) = removeFilledRows(bakedBoard)
       val preMovingState = generateMovingState(nextTetrimino, random)
       val nextMovingState = preMovingState.copy(tPerYRow = preMovingState.tPerYRow - count)
       val nextNextTetrimino = randomTetrimino(random)
-      val nextRowsShape2 = convertTetriminoStateToRows(nextMovingState)
-      if(nextRowsShape2.isEmpty) {
-        println("Couldn't co  nvert just generated Tetrimino")
+      val nextRowsShape2Opt = convertTetriminoStateToRows(nextMovingState)
+      nextRowsShape2Opt match {
+        case None =>
+          println("Couldn't convert just generated Tetrimino")
+          Finished(nextBoard)
+        case Some(nextRowsShape2) if (isThereACollision(nextBoard, nextRowsShape2)) =>
+          Finished(nextBoard)
+        case Some(nextRowsShape2) =>
+          Running(nextBoard, nextMovingState, nextRowsShape2, nextNextTetrimino)
       }
-      if(nextRowsShape2.isEmpty || isThereACollision(nextBoard, nextRowsShape2.get))
-        FinishedGame(nextBoard)
-      else
-        RunningGameState(nextBoard, nextMovingState, nextRowsShape2.get, nextNextTetrimino)
   }
 
-  def handleEvent(s: State, event: Event, random: Int): State = (s, event) match {
-    case (f: FinishedGame, _) => f
-    case (PausedGame(g), Pause) => g
-    case (PausedGame(_), _) => s // ignoring other events when paused
-    case (_, Pause) => PausedGame(s)
-    case (gameState@RunningGameState(board, movingState, rowsShape, nextTetrimino), _) =>
-      val (nextMovingState, nextRowsShapeOpt) = move(movingState, rowsShape, event)
+  def handleEvent(s: GameState, event: Event, random: Int): GameState = (s, event) match {
+    case (f: Finished, _) => f
+    case (Paused(g), Pause) => g
+    case (Paused(_), _) => s // ignoring other events when paused
+    case (_, Pause) => Paused(s)
+    case (gameState@Running(board, movingState, rowsShape, nextTetrimino), _) =>
+      val (nextMovingState, nextRowsShapeOpt) = event match {
+        case MovingShapeControl(control) =>
+          move(movingState, rowsShape, control)
+        case Timer =>
+          move(movingState, rowsShape, Control.Drop)
+        case Pause =>
+          (movingState, Some(rowsShape))
+      }
 
       nextRowsShapeOpt match {
         case Some(nextRowsShape) =>
           if(isThereACollision(board, nextRowsShape)) { // cannot move inside existing filled cells
             takeNextTetrimino(gameState, random)
           } else {
-            RunningGameState(board, nextMovingState, nextRowsShape, nextTetrimino)
+            Running(board, nextMovingState, nextRowsShape, nextTetrimino)
           }
         case None => event match {
-          case UserInteraction(_) =>
-            gameState
           case Timer =>
             takeNextTetrimino(gameState, random) // if we cannot move on timer, we bake the current state and move to the next tetrimino
-          case Pause =>
+          case _ =>
             gameState
         }
       }
   }
 
-  def startGame(random: Int): RunningGameState = {
+  def startGame(random: Int): GameState.Running = {
     val t = randomTetrimino(random)
     val m = generateMovingState(t, random)
     convertTetriminoStateToRows(m) match {
       case Some(rowsShape) =>
         val initialRows = List()// List.fill(width)(FilledCell()))
-        RunningGameState (Board(initialRows.size, initialRows), m, rowsShape,
+        GameState.Running(Board(initialRows.size, initialRows), m, rowsShape,
           randomTetrimino (random / Tetrimino.values.size) )
       case None =>
         println("Failed to generate a tetrimino")

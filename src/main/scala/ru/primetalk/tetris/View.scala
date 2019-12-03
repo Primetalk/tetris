@@ -1,6 +1,7 @@
 package ru.primetalk.tetris
 
 import Game._
+import GameState._
 import org.scalajs.dom
 import org.scalajs.dom.ext.Color
 
@@ -12,17 +13,18 @@ import org.scalajs.dom.ext.Color
  *  TODO: draw original tetris colors
  */
 class View(val ctx: dom.CanvasRenderingContext2D) {
-  val cellSize = math.min(ctx.canvas.width / Game.width, ctx.canvas.height / Game.height)
+  val cellSize: TimeMs = math.min(ctx.canvas.width / Game.width, ctx.canvas.height / Game.height)
 
-  val backgroundColor = dom.ext.Color.White
+  val backgroundColor: Color = dom.ext.Color.White
 
   def jToY(j: Int): Int = ctx.canvas.height - cellSize * (j + 1)
 
   def rowView(j: Int, row: Row, color: dom.ext.Color): Unit = {
-    row.zipWithIndex.filter(_._1.isInstanceOf[FilledCell]).map(_._2).foreach{
-      i =>
+    row.zipWithIndex.foreach{
+      case (CellInfo.FilledCell(_), i) =>
         ctx.fillStyle = color.toString()
         ctx.fillRect(i * cellSize, jToY(j), cellSize - 1, cellSize - 1) // -1 - is the thin line between cells
+      case _ => // do nothing for empty cells
     }
   }
 
@@ -32,22 +34,22 @@ class View(val ctx: dom.CanvasRenderingContext2D) {
     }
   }
 
-  def redrawGame(oldGame: State, newState: State): Unit = {
+  def redrawGame(oldGame: GameState, newState: GameState): Unit = {
     ctx.beginPath()
     oldGame match {
-      case RunningGameState(board, _, rowsShape, _) =>
+      case Running(board, _, rowsShape, _) =>
         rowsShapeView(board, backgroundColor)
         rowsShapeView(rowsShape, backgroundColor)
-      case PausedGame(RunningGameState(board, _, rowsShape, _)) =>
+      case Paused(Running(board, _, rowsShape, _)) =>
         rowsShapeView(board, backgroundColor)
         rowsShapeView(rowsShape, backgroundColor)
       case _ =>
     }
     newState match {
-      case RunningGameState(board, _, rowsShape, _) =>
+      case Running(board, _, rowsShape, _) =>
         rowsShapeView(board, dom.ext.Color.Cyan)
         rowsShapeView(rowsShape, dom.ext.Color.Magenta)
-      case PausedGame(RunningGameState(board, _, rowsShape, _)) =>
+      case Paused(Running(board, _, rowsShape, _)) =>
         rowsShapeView(board, dom.ext.Color.Blue)
         rowsShapeView(rowsShape, dom.ext.Color.Green)
       case _ =>

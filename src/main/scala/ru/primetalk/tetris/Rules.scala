@@ -1,5 +1,7 @@
 package ru.primetalk.tetris
 
+import scala.annotation.tailrec
+
 trait Configuration {
   val width = 10
   val height = 20
@@ -39,7 +41,9 @@ trait Configuration {
  * как можно дольше, чтобы таким образом получить как можно больше очков.
  */
 trait Rules extends Configuration with Rotations {
+
   sealed trait Tetrimino
+
   object Tetrimino {
     case object I extends Tetrimino
     case object J extends Tetrimino
@@ -51,25 +55,6 @@ trait Rules extends Configuration with Rotations {
     val values = List(I, J, L, O, S, T, Z)
   }
 
-  // We save only 3 points of 4. The position 0,0 is always present.
-  case class TetriminoShape(points: List[P])
-  val shapes: Map[Tetrimino, TetriminoShape] = Map(
-    Tetrimino.I -> TetriminoShape(List( 0~ 2, 0~  1,  0~ -1)),
-    Tetrimino.J -> TetriminoShape(List( 0~ 2, 0~  1, -1~  0)),
-    Tetrimino.L -> TetriminoShape(List( 0~ 2, 0~  1,  1~  0)),
-    Tetrimino.O -> TetriminoShape(List( 0~ 1, 1~  1,  1~  0)),
-    Tetrimino.S -> TetriminoShape(List(-1~ 0, 0~ -1,  1~ -1)),
-    Tetrimino.T -> TetriminoShape(List(-1~ 0, 1~  0,  0~ -1)),
-    Tetrimino.Z -> TetriminoShape(List( 1~ 0, 0~ -1, -1~ -1))
-  )
-
-  implicit class TetriminoShapeOps(shape: TetriminoShape) {
-    def rotateBy(m: Rotation): TetriminoShape =
-      TetriminoShape(shape.points.map(m(_)))
-  }
-
-  // case class Color() - home exercise
-
   // Time that is measured in milliseconds
   type TimeMs = Int
 
@@ -77,29 +62,68 @@ trait Rules extends Configuration with Rotations {
   type Angle = Rotation
 
   val defaultTPerYRow: TimeMs = 1000
+
   /**
    * Part of state about the moving tetrimino.
+   *
    * @param position position
    * @param tPerYRow - time that it takes to move to the next row. It's an inverse of the velocity
    *                 we can use this time as an argument to timer.
    */
   case class MovingState(tetrimino: Tetrimino, position: P, angle: Angle, tPerYRow: TimeMs)
 
+}
+/** In this trait we lower abstraction from identifiers of tetriminos to
+ *  their points. We use intermediate point-based representation
+ */
+trait Shapes extends Rules {
+  // We save only 3 points of 4. The position 0,0 is always present.
+  type TetriminoShape = List[P]
+  def TetriminoShape(ps: P*): TetriminoShape = ps.toList
+  val shapes: Map[Tetrimino, TetriminoShape] = Map(
+    Tetrimino.I -> TetriminoShape(P( 0, 2), P(0,  1), P( 0, -1)),
+    Tetrimino.J -> TetriminoShape(P( 0, 2), P(0,  1), P(-1,  0)),
+    Tetrimino.L -> TetriminoShape(P( 0, 2), P(0,  1), P( 1,  0)),
+    Tetrimino.O -> TetriminoShape(P( 0, 1), P(1,  1), P( 1,  0)),
+    Tetrimino.S -> TetriminoShape(P(-1, 0), P(0, -1), P( 1, -1)),
+    Tetrimino.T -> TetriminoShape(P(-1, 0), P(1,  0), P( 0, -1)),
+    Tetrimino.Z -> TetriminoShape(P( 1, 0), P(0, -1), P(-1, -1))
+  )
+
+  implicit class TetriminoShapeOps(shape: TetriminoShape) {
+    def rotateBy(rotation: Rotation): TetriminoShape =
+      shape.map(rotation(_))
+  }
+}
+
+/**
+ * Rows contains the next lower abstraction layer - representation
+ * of board and falling tetrimino as rows of cells.
+ */
+trait RowOfCells extends Shapes {
+
   sealed trait CellInfo
-  case object EmptyCell extends CellInfo
-  // Home exercise: add a logical `color` to match colors of tetriminos
-  case class FilledCell(/* color: Color */) extends CellInfo
+  object CellInfo {
+    case object EmptyCell extends CellInfo
+    case class FilledCell(tetrimino: Tetrimino) extends CellInfo
+  }
+  import CellInfo._
 
   // For curious: there is a way to represent list of length N in Scala. Like `List[10, CellInfo]`
   type Row = List[CellInfo]
   type Rows = List[Row]
   val emptyRow: Row = List.fill(width)(EmptyCell)
 
+  implicit class BoolOps(b: Boolean) {
+    def toOption: Option[Unit] = if(b) Some(()) else None
+  }
+
   /** RowsShape contains a few rows with some filled cells.
    * This data structure is reused for the board itself and for the moving set of rows. */
   case class RowsShape(top: Int, rows: Rows) {
-    def bottom: Int = top - rows.size + 1
-    def height: Int = top
+    def makeSureAboveLowerBorder: Option[RowsShape] =
+      (top - rows.size  >= 0).toOption
+        .map(_ => this)
   }
 
   /**
@@ -110,25 +134,18 @@ trait Rules extends Configuration with Rotations {
 
   def Board(h: Int, rows: Rows): Board = RowsShape(h, rows)
 
-  def validate(rowsShape: RowsShape): Option[RowsShape] =
-    if(rowsShape.bottom <= 0)
-      None
-    else
-      Some(rowsShape)
-
   // all points in this list should be on the same height
-  def listOfPointsToRow(lst: List[P]): Option[Row] = {
-    val is = lst.map(_.i).toSet
-    if(is.contains(-1) || is.contains(width)) // prevent moving outside left and right borders
-      None
-    else
-      Some(
+  // prevent moving outside left and right borders
+  def listOfPointsToRow(t: Tetrimino, points: List[P]): Option[Row] =
+    points
+      .forall(p => p.i >= 0 && p.i < width)
+      .toOption
+      .map(_ =>
         (0 until width).toList.map {
-          case i if is.contains(i) => FilledCell()
+          case i if points.exists(_.i == i) => FilledCell(t)
           case _ => EmptyCell
         }
       )
-  }
 
   /** This method "renders" the moving state of the tetrimino in the form of a few rows.
    * If the moving state cannot be rendered within the boundaries, then returns None
@@ -136,15 +153,22 @@ trait Rules extends Configuration with Rotations {
   def convertTetriminoStateToRows(s: MovingState): Option[RowsShape] = {
     val shape = shapes(s.tetrimino)
     val rotatedShape = shape.rotateBy(s.angle)
-    val pointsWithZero = ZeroP :: rotatedShape.points
+    val pointsWithZero = ZeroP :: rotatedShape
 
     val pointsShifted = pointsWithZero.map(_ + s.position)
-    val rowCells:List[(Int,Option[Row])] = pointsShifted.groupBy(_.j).toList.sortBy(-_._1)
-      .map{ case (j,ps) => (j, listOfPointsToRow(ps))}
-    if(rowCells.last._1 < 0)
-      None
-    else
-      Some(RowsShape(top = rowCells.head._1, rowCells.map(_._2.get)))
+
+    val pointsGroupedByJ: List[(TimeMs, List[P])] =
+      pointsShifted
+        .groupBy(_.j).toList
+        .sortBy(-_._1)// sort by J - top first.
+    val rowCells:List[(Int,Option[Row])] = pointsGroupedByJ
+        .map{ case (j, ps) => (j, listOfPointsToRow(s.tetrimino, ps))}
+
+    rowCells.forall(_._2.isDefined)
+      .toOption.flatMap(_ =>
+        RowsShape(top = rowCells.head._1, rowCells.map(_._2.get))
+          .makeSureAboveLowerBorder
+      )
   }
 
   /** Checks two rows if they collide at some position.
@@ -153,8 +177,9 @@ trait Rules extends Configuration with Rotations {
    * if one of the lists finishes, then there is no collision.
    * otherwise - it's collision
    * */
-  def isRowsCollision(r1: Row, r2: Row): Boolean =
-    (r1, r2 ) match {
+  @tailrec
+  final def isRowsCollision(r1: Row, r2: Row): Boolean =
+    (r1, r2) match {
       case (EmptyCell::t1, _::t2) => isRowsCollision(t1,t2)
       case (_::t1, EmptyCell::t2) => isRowsCollision(t1,t2)
       case (Nil, _) => false
@@ -162,6 +187,14 @@ trait Rules extends Configuration with Rotations {
       case _ => true
     }
 
+  /** Given two lists performs pairwise merge.
+   * This could have been implemented as
+   * {{{
+   *   l1.zip(l2).map(mergeElements.tupled)
+   * }}}
+   * - however, we want to have the result of the same length as the first one
+   * regardless of the size of the second list.
+   * */
   def mergeLists[A](l1: List[A], l2: List[A])(mergeElements: (A, A) => A): List[A] = {
     @scala.annotation.tailrec
     def loop(l1: List[A], l2: List[A], res: List[A] = Nil): List[A] =
@@ -173,30 +206,28 @@ trait Rules extends Configuration with Rotations {
     loop(l1, l2)
   }
 
+  val mergeCells: (CellInfo, CellInfo) => CellInfo = {
+    case (EmptyCell, h) => h
+    case (h, _) => h
+  }
   /** merges two rows */
   def mergeRows(r1: Row, r2: Row, res: Row = Nil): Row =
-    mergeLists(r1, r2){
-      case (EmptyCell, h) => h
-      case (h, _) => h
-    }
-
-  def prepend[A](n: Int, a: A)(lst: List[A]): List[A] =
-    if(n <= 0) lst else prepend(n-1,a)(a::lst)
+    mergeLists(r1, r2)(mergeCells)
 
   // isThereACollision checks if there is a collision between the board and the moving state.
   def isThereACollision(board: Board, moving: RowsShape): Boolean = {
-    val height = math.max(board.height, moving.top)
-    val boardRows  = List.fill(height - board.height)(emptyRow) ::: board.rows
+    val height = math.max(board.top, moving.top)
+    val boardRows  = List.fill(height - board .top)(emptyRow) ::: board.rows
     val movingRows = List.fill(height - moving.top)(emptyRow) ::: moving.rows
 
     boardRows.zip(movingRows).exists((isRowsCollision _).tupled)
   }
 
-  // when we cannot move further, we bake the tetramino at the position
+  // when we cannot move further, we bake the tetrimino at the position
   def bake(board: Board, moving: RowsShape): Board = {
-    val height = math.max(board.height, moving.top)
+    val height = math.max(board.top, moving.top)
     // make rows to be of the same height
-    val boardRows  = List.fill(height - board.height)(emptyRow) ::: board.rows
+    val boardRows  = List.fill(height - board .top)(emptyRow) ::: board.rows
     val movingRows = List.fill(height - moving.top)(emptyRow) ::: moving.rows
     Board(height, mergeLists(boardRows, movingRows)(mergeRows(_,_)))
   }
@@ -215,6 +246,6 @@ trait Rules extends Configuration with Rotations {
   def removeFilledRows(board: Board): (Board, Int) = {
     val (removed, rows) = board.rows.partition(isFilled)
     val count = removed.size
-    (Board(board.height - count, rows), count)
+    (Board(board.top - count, rows), count)
   }
 }
