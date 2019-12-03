@@ -10,7 +10,7 @@ object Tetris extends Rules {
   def startTetris(canvasId: String): Unit = {
     val canvas = dom.document.getElementById(canvasId).asInstanceOf[HTMLCanvasElement]
     val ctx = canvas.getContext("2d").asInstanceOf[dom.CanvasRenderingContext2D]
-    val controller = new Controller(ctx)
+    val controller = new Controller(ctx, TetrisGame.GameImpl, new View(ctx))
   }
   def main(args: Array[String]): Unit = {
     println("Hello, World")

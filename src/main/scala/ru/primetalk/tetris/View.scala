@@ -1,10 +1,13 @@
 package ru.primetalk.tetris
 
-import Game._
+import TetrisGame._
 import GameState._
 import org.scalajs.dom
 import org.scalajs.dom.ext.Color
 
+trait GameView[S] {
+  def redrawGame(oldGame: S, newState: S): Unit
+}
 /** Renders board on canvas.
  * It is itself immutable, but performs mutations on the provided context.
  *  TODO: show next tetrimino
@@ -12,8 +15,8 @@ import org.scalajs.dom.ext.Color
  *  TODO: draw cells with a nice border
  *  TODO: draw original tetris colors
  */
-class View(val ctx: dom.CanvasRenderingContext2D) {
-  val cellSize: TimeMs = math.min(ctx.canvas.width / Game.width, ctx.canvas.height / Game.height)
+class View(val ctx: dom.CanvasRenderingContext2D) extends GameView[TetrisGame.GameState] {
+  val cellSize: Int = math.min(ctx.canvas.width / TetrisGame.width, ctx.canvas.height / TetrisGame.height)
 
   val backgroundColor: Color = dom.ext.Color.White
 

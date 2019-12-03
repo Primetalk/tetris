@@ -8,7 +8,7 @@ trait TetrisGens {
     Arbitrary { for {
       i <- Gen.choose(-100, 100)
       j <- Gen.choose(-100, 100)
-      } yield i~j
+      } yield P(i, j)
     }
 
 }
