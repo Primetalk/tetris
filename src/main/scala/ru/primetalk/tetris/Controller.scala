@@ -7,8 +7,12 @@ import scala.util.Random
 import scala.scalajs.js.timers
 
 // Mutable part of the program
-class Controller[S, Control](val ctx: dom.CanvasRenderingContext2D, val game: Game[S, Control], gameView: GameView[S]) {
-//  val view = new View(ctx)
+class Controller[S, Control]
+(
+  val ctx: dom.CanvasRenderingContext2D,
+  val game: Game[S, Control],
+  val gameView: GameView[S]
+) {
   // The following are the only two variables in the program
   private val rnd = new Random()
   private var currentGameState: S = game.startGame(rnd.nextInt())

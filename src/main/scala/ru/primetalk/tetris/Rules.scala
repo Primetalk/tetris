@@ -249,3 +249,5 @@ trait RowOfCells extends Shapes {
     (Board(board.top - count, rows), count)
   }
 }
+
+object BasicTetrisDefinitions extends RowOfCells

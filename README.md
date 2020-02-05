@@ -36,7 +36,7 @@ In `Rotations` trait one may find an example of an Abelian group :).
 
 ## Step 4. Algorithms
 
-Data structures help or not help writing algorithms.
+Data structures help or do not help writing algorithms.
 
  - conversion of points to rows. One data structure that is convenient to rotations
    to another data structure that is convenient to moves and the rest of game logic

@@ -1,7 +1,15 @@
 package ru.primetalk.tetris
 
 import org.scalajs.dom.ext.KeyCode
+import BasicTetrisDefinitions._
 
+/**
+ * Interface of a game. We should be able to start a new game and update
+ * it's state based on events.
+ * @tparam S game state
+ * @tparam Control type that represents logical game control events.
+ *                 There are also Timer and Pause "global" events.
+ */
 trait Game[S, Control] {
   def startGame(random: Int): S
   def handleEvent(s: S, e: Event, random: Int): S
@@ -22,7 +30,7 @@ trait Game[S, Control] {
  * TODO: Add game score, improve speedup
  * TODO: Add a few randomly filled rows.
  */
-trait GameMechanics extends RowOfCells {
+trait GameMechanics {
 
   sealed trait GameState
   object GameState {
@@ -72,7 +80,7 @@ trait GameMechanics extends RowOfCells {
         case None =>
           println("Couldn't convert just generated Tetrimino")
           Finished(nextBoard)
-        case Some(nextRowsShape2) if (isThereACollision(nextBoard, nextRowsShape2)) =>
+        case Some(nextRowsShape2) if isThereACollision(nextBoard, nextRowsShape2) =>
           Finished(nextBoard)
         case Some(nextRowsShape2) =>
           Running(nextBoard, nextMovingState, nextRowsShape2, nextNextTetrimino)
@@ -112,6 +120,7 @@ trait GameMechanics extends RowOfCells {
         }
     }
 
+    @scala.annotation.tailrec
     def startGame(random: Int): GameState.Running = {
       val t = randomTetrimino(random)
       val m = generateMovingState(t, random)

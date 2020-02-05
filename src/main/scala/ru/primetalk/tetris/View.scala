@@ -4,19 +4,15 @@ import TetrisGame._
 import GameState._
 import org.scalajs.dom
 import org.scalajs.dom.ext.Color
+import ru.primetalk.tetris.BasicTetrisDefinitions._
 
 trait GameView[S] {
   def redrawGame(oldGame: S, newState: S): Unit
 }
-/** Renders board on canvas.
- * It is itself immutable, but performs mutations on the provided context.
- *  TODO: show next tetrimino
- *  TODO*: next tetrimino should rotate at the same speed.
- *  TODO: draw cells with a nice border
- *  TODO: draw original tetris colors
- */
-class View(val ctx: dom.CanvasRenderingContext2D) extends GameView[TetrisGame.GameState] {
-  val cellSize: Int = math.min(ctx.canvas.width / TetrisGame.width, ctx.canvas.height / TetrisGame.height)
+
+trait TetrisViews {
+  val ctx: dom.CanvasRenderingContext2D
+  val cellSize: Int = math.min(ctx.canvas.width / BasicTetrisDefinitions.width, ctx.canvas.height / BasicTetrisDefinitions.height)
 
   val backgroundColor: Color = dom.ext.Color.White
 
@@ -36,6 +32,16 @@ class View(val ctx: dom.CanvasRenderingContext2D) extends GameView[TetrisGame.Ga
       rowView(j, r, color)
     }
   }
+
+}
+/** Renders board on canvas.
+ * It is itself immutable, but performs mutations on the provided context.
+ *  TODO: show next tetrimino
+ *  TODO*: next tetrimino should rotate at the same speed.
+ *  TODO: draw cells with a nice border
+ *  TODO: draw original tetris colors
+ */
+class View(val ctx: dom.CanvasRenderingContext2D) extends GameView[TetrisGame.GameState] with TetrisViews {
 
   def redrawGame(oldGame: GameState, newState: GameState): Unit = {
     ctx.beginPath()
